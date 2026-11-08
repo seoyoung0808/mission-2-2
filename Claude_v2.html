@@ -1,0 +1,809 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>주중 플래너</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#1f2430; --muted:#5d6676; --line:#dde1e7; --line-soft:#eef0f3;
+  --primary:#3552c9; --primary-ink:#ffffff; --primary-soft:#e8ecfb;
+  --danger:#b4372f; --danger-soft:#fdebe9; --ok:#23784d; --ok-soft:#e5f4ec;
+  --slot:20px; /* 15분 = 20px, 1시간 = 80px */
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;font-size:15px;line-height:1.5;word-break:keep-all}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid #8aa0ef;outline-offset:2px}
+.wrap{width:min(100% - 32px,1240px);margin:24px auto 64px}
+header.page{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px;margin-bottom:16px}
+header.page h1{margin:0;font-size:26px;letter-spacing:-.03em}
+header.page p{margin:4px 0 0;color:var(--muted)}
+.save-state{font-size:13px;color:var(--muted)}
+.save-state.warn{color:var(--danger)}
+
+/* 상단 패널 */
+.top{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start;margin-bottom:20px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.panel h2{margin:0 0 12px;font-size:16px;display:flex;align-items:center;gap:8px}
+.panel h2 .step{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:700}
+.panel + .panel{margin-top:0}
+.stack{display:grid;gap:16px}
+.field{display:grid;gap:4px;margin-bottom:10px}
+.field label,.field .label{font-size:13px;font-weight:600}
+.field .opt{font-weight:400;color:var(--muted)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+input[type=text],input[type=number],input[type=time],select{width:100%;height:38px;padding:0 10px;border:1px solid #c9ced8;border-radius:8px;background:#fff}
+input[aria-invalid=true],select[aria-invalid=true]{border-color:var(--danger);background:var(--danger-soft)}
+.help{font-size:12px;color:var(--muted);margin:0}
+.swatches{display:flex;flex-wrap:wrap;gap:6px}
+.swatch-opt{position:relative}
+.swatch-opt input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.swatch-opt span{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 6px;border-radius:8px;border:2px solid transparent;background:var(--sw-bg);box-shadow:inset 0 0 0 1px var(--sw-line);font-size:11px;color:var(--ink)}
+.swatch-opt input:checked + span{border-color:var(--ink)}
+.swatch-opt input:focus-visible + span{outline:3px solid #8aa0ef;outline-offset:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:38px;padding:0 16px;border-radius:8px;border:1px solid #c9ced8;background:#fff;font-weight:600}
+.btn:hover{background:#f3f5f8}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-ink)}
+.btn.primary:hover{background:#2b45ad}
+.btn.block{width:100%}
+.btn.danger{border-color:#e3b3ae;color:var(--danger)}
+.btn.danger:hover{background:var(--danger-soft)}
+.btn.primary.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+.btn.primary.danger:hover{background:#962c25}
+.btn-row{display:flex;flex-wrap:wrap;gap:8px}
+.btn-row .btn{flex:1 1 auto}
+
+/* 카드 목록 */
+.card-list{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:330px;overflow:auto}
+.card-item{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 10px;border-radius:9px;background:var(--c-bg);border:1px solid var(--c-bg);border-left:5px solid var(--c-line);cursor:grab;user-select:none}
+.card-item:hover{filter:brightness(.98)}
+.card-item.selected{border-color:var(--ink);border-left-color:var(--c-line);box-shadow:0 0 0 1px var(--ink)}
+.card-item:active{cursor:grabbing}
+.card-item .name{flex:1;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-item .dur{font-size:13px;color:#3d4452;white-space:nowrap}
+.icon-btn{flex:none;width:26px;height:26px;border-radius:6px;border:0;background:transparent;color:#4a5160;font-size:18px;line-height:1;display:grid;place-items:center}
+.icon-btn:hover{background:rgba(0,0,0,.08);color:var(--danger)}
+.empty{color:var(--muted);font-size:13px;padding:14px;text-align:center;border:1px dashed var(--line);border-radius:9px}
+
+/* 시간표 */
+.tt-section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 14px 16px}
+.tt-title{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px;margin:2px 4px 12px}
+.tt-title h2{margin:0;font-size:16px}
+.tt-title p{margin:0;font-size:13px;color:var(--muted)}
+.tt-scroll{overflow:auto;max-height:max(440px,calc(100vh - 48px));border:1px solid var(--line);border-radius:10px}
+.tt-grid{display:grid;grid-template-columns:60px repeat(5,minmax(112px,1fr));min-width:620px}
+.tt-head{position:sticky;top:0;z-index:6;background:#fafbfc;border-bottom:1px solid var(--line);padding:9px 0;text-align:center;font-weight:700;font-size:14px}
+.tt-head.corner{left:0;z-index:7}
+.tt-head + .tt-head{border-left:1px solid var(--line)}
+.time-col{position:sticky;left:0;z-index:4;background:#fff;height:calc(var(--slot) * 72);border-right:1px solid var(--line)}
+.time-col span{position:absolute;right:8px;transform:translateY(-50%);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;background:#fff;padding:0 2px}
+.time-col span:first-child{transform:none;top:2px!important}
+.time-col span:last-child{transform:translateY(-100%)}
+.day-col{position:relative;height:calc(var(--slot) * 72);border-left:1px solid var(--line);
+  background-image:linear-gradient(to bottom,#d5dae2 1px,transparent 1px),linear-gradient(to bottom,var(--line-soft) 1px,transparent 1px);
+  background-size:100% calc(var(--slot) * 4),100% var(--slot)}
+.time-col + .day-col{border-left:0}
+.day-col.drag-over{background-color:#f8faff}
+.event{position:absolute;left:3px;right:3px;border-radius:6px;background:var(--c-bg);border:1px solid var(--c-line);border-left-width:4px;padding:3px 24px 3px 7px;overflow:hidden;cursor:grab;font-size:12px;line-height:16px;z-index:2}
+.event:active{cursor:grabbing}
+.event.dragging{opacity:.35}
+.event .ev-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.event .ev-time{font-variant-numeric:tabular-nums;color:#3d4452;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.event.compact{display:flex;gap:6px;align-items:center;padding-top:0;padding-bottom:0;font-size:11px;line-height:1}
+.event.compact .ev-name{flex:none;max-width:55%}
+.event .ev-del{position:absolute;top:1px;right:1px;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:#4a5160;font-size:15px;line-height:1;display:grid;place-items:center;opacity:.55}
+.event.compact .ev-del{top:50%;transform:translateY(-50%);height:16px}
+.event:hover .ev-del,.event .ev-del:focus-visible{opacity:1}
+.event .ev-del:hover{background:rgba(0,0,0,.1);color:var(--danger)}
+.drop-preview{position:absolute;left:3px;right:3px;border:2px dashed var(--primary);background:rgba(53,82,201,.10);border-radius:6px;z-index:3;pointer-events:none;font-size:12px;font-weight:700;color:var(--primary);padding:2px 6px;line-height:16px;white-space:nowrap;overflow:hidden}
+.drop-preview.bad{border-color:var(--danger);background:rgba(180,55,47,.10);color:var(--danger)}
+
+/* 안내 메시지 */
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);max-width:min(560px,calc(100% - 32px));padding:12px 16px;border-radius:10px;background:#1f2430;color:#fff;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.error{background:#8f2a24}
+.toast.success{background:#1d6440}
+
+dialog{border:0;border-radius:14px;padding:22px;max-width:420px;width:calc(100% - 32px);box-shadow:0 20px 50px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(20,24,32,.45)}
+dialog h3{margin:0 0 8px;font-size:17px}
+dialog p{margin:0 0 18px;color:var(--muted)}
+dialog .btn-row{justify-content:flex-end}
+dialog .btn-row .btn{flex:0 0 auto}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+@media (max-width:1000px){
+  .top{grid-template-columns:1fr 1fr}
+  .top > .panel:first-child{grid-column:1 / -1}
+}
+@media (max-width:640px){
+  .top{grid-template-columns:1fr}
+  .wrap{width:calc(100% - 24px);margin-top:16px}
+  header.page h1{font-size:22px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <div>
+      <h1>주중 플래너</h1>
+      <p>활동을 카드로 만들고, 월~금 시간표에 끌어다 놓아 겹치지 않는 하루 계획을 세워 보세요.</p>
+    </div>
+    <span id="saveState" class="save-state" aria-live="polite"></span>
+  </header>
+
+  <section class="top" aria-label="카드와 일정 관리">
+    <!-- 1. 카드 만들기 -->
+    <form id="createForm" class="panel" novalidate>
+      <h2><span class="step">1</span>카드 만들기</h2>
+      <div class="row">
+        <div class="field">
+          <label for="cName">카드 이름</label>
+          <input id="cName" type="text" maxlength="20" placeholder="예: 독서" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="cDur">소요 시간(분)</label>
+          <input id="cDur" type="number" min="15" step="15" placeholder="예: 30" inputmode="numeric">
+        </div>
+      </div>
+      <div class="field">
+        <span class="label" id="colorLabel">색상 <span class="opt">(선택하지 않으면 기본 색상)</span></span>
+        <div id="swatches" class="swatches" role="radiogroup" aria-labelledby="colorLabel"></div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="cDay">요일 <span class="opt">(선택)</span></label>
+          <select id="cDay"></select>
+        </div>
+        <div class="field">
+          <label for="cTime">시작 시간 <span class="opt">(선택)</span></label>
+          <input id="cTime" type="time" step="900">
+        </div>
+      </div>
+      <p class="help" style="margin-bottom:12px">요일과 시작 시간을 함께 입력하면 카드를 만들면서 시간표에도 배치해요. 소요 시간은 15분 단위(15, 30, 45, 60…)로 입력하세요.</p>
+      <button type="submit" class="btn primary block">카드 만들기</button>
+    </form>
+
+    <!-- 2. 카드 목록 -->
+    <section class="panel" aria-labelledby="listTitle">
+      <h2 id="listTitle"><span class="step">2</span>카드 목록</h2>
+      <p class="help" style="margin-bottom:10px">카드를 아래 시간표로 끌어다 놓거나, 클릭해 선택한 뒤 오른쪽에서 추가하세요.</p>
+      <ul id="cardList" class="card-list"></ul>
+    </section>
+
+    <div class="stack">
+      <!-- 3. 일정 추가 -->
+      <form id="addForm" class="panel" novalidate>
+        <h2><span class="step">3</span>선택한 카드로 일정 추가</h2>
+        <div class="field">
+          <label for="aCard">카드</label>
+          <select id="aCard"></select>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="aDay">요일</label>
+            <select id="aDay"></select>
+          </div>
+          <div class="field">
+            <label for="aTime">시작 시간</label>
+            <input id="aTime" type="time" step="900">
+          </div>
+        </div>
+        <button type="submit" class="btn primary block">시간표에 추가</button>
+      </form>
+
+      <!-- 데이터 파일 -->
+      <section class="panel" aria-labelledby="fileTitle">
+        <h2 id="fileTitle">데이터 관리</h2>
+        <div class="btn-row">
+          <button type="button" id="exportBtn" class="btn">파일로 저장</button>
+          <button type="button" id="importBtn" class="btn">파일 불러오기</button>
+        </div>
+        <input id="importFile" type="file" accept=".json,application/json" hidden>
+        <p class="help" style="margin-top:8px">변경 내용은 이 브라우저에 자동 저장돼요. 다른 곳에 백업하려면 파일로 저장하세요.</p>
+        <button type="button" id="resetBtn" class="btn danger block" style="margin-top:12px">처음 상태로 초기화</button>
+      </section>
+    </div>
+  </section>
+
+  <!-- 주간 시간표 -->
+  <section class="tt-section" aria-labelledby="ttTitle">
+    <div class="tt-title">
+      <h2 id="ttTitle">주간 시간표 (월~금, 06:00~24:00)</h2>
+      <p>15분 단위로 맞춰져요 · 배치한 일정도 끌어서 옮길 수 있어요 · × 버튼으로 삭제</p>
+    </div>
+    <div class="tt-scroll" id="ttScroll">
+      <div class="tt-grid" id="ttGrid"></div>
+    </div>
+  </section>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<dialog id="replaceDialog" aria-labelledby="replaceTitle" aria-describedby="replaceText">
+  <h3 id="replaceTitle"></h3>
+  <p id="replaceText"></p>
+  <div class="btn-row">
+    <button type="button" id="replaceCancel" class="btn">취소</button>
+    <button type="button" id="replaceOk" class="btn primary">교체하기</button>
+  </div>
+</dialog>
+
+<noscript><p style="text-align:center">이 페이지는 JavaScript를 켜야 사용할 수 있어요.</p></noscript>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ===== 기준 값 ===== */
+  const STORAGE_KEY = 'weekday-planner-v1';
+  const DAYS = ['월', '화', '수', '목', '금'];
+  const DAY_START = 6 * 60;   // 06:00
+  const DAY_END = 24 * 60;    // 24:00
+  const STEP = 15;            // 15분 단위
+  const SLOT_PX = 20;         // 15분당 높이(px), CSS의 --slot과 같음
+  const COLORS = [
+    { id: 'default', name: '기본', bg: '#e8ecf2', line: '#8a94a6' },
+    { id: 'red',     name: '빨강', bg: '#fde2e1', line: '#e0605a' },
+    { id: 'orange',  name: '주황', bg: '#ffe6cf', line: '#e8893a' },
+    { id: 'yellow',  name: '노랑', bg: '#fff2b8', line: '#d4a514' },
+    { id: 'lime',    name: '연두', bg: '#e6f4c8', line: '#86b62c' },
+    { id: 'green',   name: '초록', bg: '#d3efdf', line: '#3c9e6b' },
+    { id: 'teal',    name: '청록', bg: '#cfeff0', line: '#2c9ca0' },
+    { id: 'sky',     name: '하늘', bg: '#d7ebfc', line: '#3d8fd6' },
+    { id: 'blue',    name: '파랑', bg: '#dfe3fd', line: '#5468e0' },
+    { id: 'purple',  name: '보라', bg: '#ebe1fb', line: '#8b62d6' },
+    { id: 'pink',    name: '분홍', bg: '#fce0ee', line: '#d6559a' }
+  ];
+  const DEFAULT_CARDS = [
+    { name: '공부', duration: 60, color: 'blue' },
+    { name: '운동', duration: 30, color: 'green' },
+    { name: '식사', duration: 60, color: 'orange' },
+    { name: '휴식', duration: 15, color: 'purple' }
+  ];
+
+  const $ = id => document.getElementById(id);
+  const colorOf = id => COLORS.find(c => c.id === id) || COLORS[0];
+  const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = m => (m < 0 ? '-' : '') + pad(Math.floor(Math.abs(m) / 60)) + ':' + pad(Math.abs(m) % 60);
+  const range = (s, d) => fmt(s) + '~' + fmt(s + d);
+  const isDuration = d => Number.isInteger(d) && d >= STEP && d % STEP === 0;
+
+  function parseTime(v) {
+    if (!v) return NaN;
+    const [h, m] = v.split(':').map(Number);
+    if (!Number.isInteger(h) || !Number.isInteger(m)) return NaN;
+    return h * 60 + m;
+  }
+
+  /* ===== 상태 ===== */
+  let state = null;
+  let storageOK = true;
+
+  function defaultState() {
+    return { cards: DEFAULT_CARDS.map(c => ({ id: uid('c'), ...c })), events: [] };
+  }
+
+  // 저장 데이터나 불러온 파일을 검사해 올바른 상태로 바꾼다. 잘못된 데이터면 null.
+  function sanitize(data) {
+    if (!data || typeof data !== 'object' || !Array.isArray(data.cards) || !Array.isArray(data.events)) return null;
+    const cards = [];
+    for (const c of data.cards) {
+      if (!c || typeof c.name !== 'string' || !c.name.trim() || !isDuration(c.duration)) return null;
+      cards.push({ id: typeof c.id === 'string' && c.id ? c.id : uid('c'), name: c.name.trim().slice(0, 40), duration: c.duration, color: colorOf(c.color).id });
+    }
+    const events = [];
+    for (const e of data.events) {
+      if (!e || typeof e.name !== 'string' || !e.name.trim() || !isDuration(e.duration)) return null;
+      if (!Number.isInteger(e.day) || e.day < 0 || e.day > 4) return null;
+      if (!Number.isInteger(e.start) || e.start % STEP !== 0 || e.start < DAY_START || e.start + e.duration > DAY_END) return null;
+      const overlap = events.some(o => o.day === e.day && e.start < o.start + o.duration && o.start < e.start + e.duration);
+      if (overlap) return null;
+      events.push({ id: typeof e.id === 'string' && e.id ? e.id : uid('e'), day: e.day, start: e.start, duration: e.duration, name: e.name.trim().slice(0, 40), color: colorOf(e.color).id });
+    }
+    return { cards, events };
+  }
+
+  function load() {
+    let raw = null;
+    try { raw = localStorage.getItem(STORAGE_KEY); } catch (err) { storageOK = false; }
+    if (raw == null) { state = defaultState(); return; }
+    let parsed = null;
+    try { parsed = sanitize(JSON.parse(raw)); } catch (err) { parsed = null; }
+    if (parsed) { state = parsed; }
+    else {
+      state = defaultState();
+      setTimeout(() => toast('저장된 내용을 읽을 수 없어 처음 상태로 시작합니다.', 'error'), 300);
+    }
+  }
+
+  function save() {
+    const el = $('saveState');
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, cards: state.cards, events: state.events }));
+      storageOK = true;
+      const now = new Date();
+      el.textContent = '자동 저장됨 · ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+      el.classList.remove('warn');
+    } catch (err) {
+      storageOK = false;
+      el.textContent = '이 브라우저에서는 자동 저장을 사용할 수 없어요. 파일로 저장해 주세요.';
+      el.classList.add('warn');
+    }
+  }
+
+  function commit() { save(); render(); }
+
+  /* ===== 배치 규칙 ===== */
+  // 배치할 수 있으면 null, 없으면 안내 문구를 돌려준다.
+  function checkPlacement(day, start, duration, ignoreId) {
+    const end = start + duration;
+    if (start < DAY_START || end > DAY_END) {
+      return `시간 범위를 벗어나 배치할 수 없어요. (${DAYS[day]}요일 ${range(start, duration)}) 일정은 06:00~24:00 안에서 시작하고 끝나야 해요.`;
+    }
+    const hit = state.events.find(e => e.id !== ignoreId && e.day === day && start < e.start + e.duration && e.start < end);
+    if (hit) {
+      return `${DAYS[day]}요일 ${range(hit.start, hit.duration)} '${hit.name}' 일정과 겹쳐서 배치할 수 없어요.`;
+    }
+    return null;
+  }
+
+  function placeCard(card, day, start) {
+    const err = checkPlacement(day, start, card.duration);
+    if (err) return err;
+    state.events.push({ id: uid('e'), day, start, duration: card.duration, name: card.name, color: card.color });
+    return null;
+  }
+
+  /* ===== 안내 메시지 ===== */
+  let toastTimer = null;
+  function toast(msg, type = 'info') {
+    const el = $('toast');
+    el.textContent = msg;
+    el.className = 'toast show ' + type;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), type === 'error' ? 5000 : 3200);
+  }
+
+  function markInvalid(input, bad) {
+    if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+  }
+
+  /* ===== 화면 그리기 ===== */
+  let selectedCardId = null;
+
+  function fillDaySelect(sel, placeholder) {
+    sel.innerHTML = '';
+    sel.append(new Option(placeholder, ''));
+    DAYS.forEach((d, i) => sel.append(new Option(d + '요일', String(i))));
+  }
+
+  function buildSwatches() {
+    const box = $('swatches');
+    COLORS.forEach((c, i) => {
+      const lab = document.createElement('label');
+      lab.className = 'swatch-opt';
+      lab.title = c.name;
+      lab.style.setProperty('--sw-bg', c.bg);
+      lab.style.setProperty('--sw-line', c.line);
+      const input = document.createElement('input');
+      input.type = 'radio'; input.name = 'color'; input.value = c.id; input.checked = i === 0;
+      input.setAttribute('aria-label', c.name + (i === 0 ? ' 색상(기본값)' : ' 색상'));
+      const span = document.createElement('span');
+      span.textContent = i === 0 ? '기본' : '';
+      lab.append(input, span);
+      box.append(lab);
+    });
+  }
+
+  function buildTimetable() {
+    const grid = $('ttGrid');
+    const corner = document.createElement('div');
+    corner.className = 'tt-head corner';
+    corner.innerHTML = '<span class="sr-only">시간</span>';
+    grid.append(corner);
+    DAYS.forEach(d => {
+      const h = document.createElement('div');
+      h.className = 'tt-head';
+      h.textContent = d + '요일';
+      grid.append(h);
+    });
+    const timeCol = document.createElement('div');
+    timeCol.className = 'time-col';
+    timeCol.setAttribute('aria-hidden', 'true');
+    for (let h = 6; h <= 24; h++) {
+      const s = document.createElement('span');
+      s.style.top = ((h * 60 - DAY_START) / STEP * SLOT_PX) + 'px';
+      s.textContent = pad(h) + ':00';
+      timeCol.append(s);
+    }
+    grid.append(timeCol);
+    DAYS.forEach((d, i) => {
+      const col = document.createElement('div');
+      col.className = 'day-col';
+      col.dataset.day = String(i);
+      col.setAttribute('role', 'list');
+      col.setAttribute('aria-label', d + '요일 일정');
+      grid.append(col);
+      bindDropZone(col);
+    });
+  }
+
+  function renderCards() {
+    const list = $('cardList');
+    list.innerHTML = '';
+    if (!state.cards.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = '카드가 없어요. 왼쪽에서 새 카드를 만들어 보세요.';
+      list.append(li);
+    }
+    state.cards.forEach(card => {
+      const c = colorOf(card.color);
+      const li = document.createElement('li');
+      li.className = 'card-item' + (card.id === selectedCardId ? ' selected' : '');
+      li.draggable = true;
+      li.tabIndex = 0;
+      li.dataset.id = card.id;
+      li.style.setProperty('--c-bg', c.bg);
+      li.style.setProperty('--c-line', c.line);
+      li.setAttribute('aria-label', `${card.name} ${card.duration}분 카드${card.id === selectedCardId ? ', 선택됨' : ''}`);
+      const name = document.createElement('span'); name.className = 'name'; name.textContent = card.name;
+      const dur = document.createElement('span'); dur.className = 'dur'; dur.textContent = card.duration + '분';
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'icon-btn'; del.textContent = '×'; del.draggable = false;
+      del.setAttribute('aria-label', card.name + ' 카드 삭제');
+      del.title = '카드 삭제 (배치한 일정은 남아요)';
+      del.addEventListener('click', ev => { ev.stopPropagation(); deleteCard(card.id); });
+      li.append(name, dur, del);
+      li.addEventListener('click', () => selectCard(card.id));
+      li.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectCard(card.id); } });
+      li.addEventListener('dragstart', ev => startDrag(ev, { kind: 'card', id: card.id, offset: 0 }));
+      li.addEventListener('dragend', endDrag);
+      list.append(li);
+    });
+
+    // 일정 추가 영역의 카드 선택 목록
+    const sel = $('aCard');
+    sel.innerHTML = '';
+    sel.append(new Option(state.cards.length ? '카드를 선택하세요' : '카드가 없어요', ''));
+    state.cards.forEach(card => sel.append(new Option(`${card.name} (${card.duration}분)`, card.id)));
+    if (!state.cards.some(c => c.id === selectedCardId)) selectedCardId = null;
+    sel.value = selectedCardId || '';
+  }
+
+  function renderEvents() {
+    document.querySelectorAll('.day-col').forEach(col => col.querySelectorAll('.event').forEach(e => e.remove()));
+    const cols = document.querySelectorAll('.day-col');
+    [...state.events].sort((a, b) => a.start - b.start).forEach(ev => {
+      const c = colorOf(ev.color);
+      const el = document.createElement('div');
+      el.className = 'event' + (ev.duration <= STEP ? ' compact' : '');
+      el.draggable = true;
+      el.dataset.id = ev.id;
+      el.setAttribute('role', 'listitem');
+      el.style.top = ((ev.start - DAY_START) / STEP * SLOT_PX) + 'px';
+      el.style.height = (ev.duration / STEP * SLOT_PX) + 'px';
+      el.style.setProperty('--c-bg', c.bg);
+      el.style.setProperty('--c-line', c.line);
+      el.title = `${ev.name} ${range(ev.start, ev.duration)} (끌어서 이동)`;
+      const name = document.createElement('div'); name.className = 'ev-name'; name.textContent = ev.name;
+      const time = document.createElement('div'); time.className = 'ev-time'; time.textContent = range(ev.start, ev.duration);
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'ev-del'; del.textContent = '×'; del.draggable = false;
+      del.setAttribute('aria-label', `${DAYS[ev.day]}요일 ${range(ev.start, ev.duration)} ${ev.name} 일정 삭제`);
+      del.addEventListener('click', e => { e.stopPropagation(); deleteEvent(ev.id); });
+      el.append(name, time, del);
+      el.addEventListener('dragstart', e => {
+        const rect = el.getBoundingClientRect();
+        startDrag(e, { kind: 'event', id: ev.id, offset: e.clientY - rect.top });
+        requestAnimationFrame(() => el.classList.add('dragging'));
+      });
+      el.addEventListener('dragend', endDrag);
+      cols[ev.day].append(el);
+    });
+  }
+
+  function render() { renderCards(); renderEvents(); }
+
+  /* ===== 동작 ===== */
+  function selectCard(id) {
+    selectedCardId = id;
+    renderCards();
+    const li = document.querySelector(`.card-item[data-id="${CSS.escape(id)}"]`);
+    if (li) li.focus();
+  }
+
+  function deleteCard(id) {
+    const card = state.cards.find(c => c.id === id);
+    if (!card) return;
+    state.cards = state.cards.filter(c => c.id !== id);
+    if (selectedCardId === id) selectedCardId = null;
+    commit();
+    toast(`'${card.name}' 카드를 목록에서 삭제했어요. 이미 배치한 일정은 그대로 남아요.`, 'success');
+  }
+
+  function deleteEvent(id) {
+    const ev = state.events.find(e => e.id === id);
+    if (!ev) return;
+    state.events = state.events.filter(e => e.id !== id);
+    commit();
+    toast(`${DAYS[ev.day]}요일 ${range(ev.start, ev.duration)} '${ev.name}' 일정을 삭제했어요.`, 'success');
+  }
+
+  // 1. 카드 만들기
+  $('createForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const nameEl = $('cName'), durEl = $('cDur'), dayEl = $('cDay'), timeEl = $('cTime');
+    [nameEl, durEl, dayEl, timeEl].forEach(el => markInvalid(el, false));
+    const name = nameEl.value.trim();
+    const durRaw = durEl.value.trim();
+    const duration = Number(durRaw);
+    const problems = [];
+    if (!name) { problems.push('카드 이름을 입력해 주세요.'); markInvalid(nameEl, true); }
+    if (!durRaw || !isDuration(duration)) {
+      problems.push('소요 시간은 15분 이상, 15분 단위(15, 30, 45, 60…)로 입력해 주세요.');
+      markInvalid(durEl, true);
+    }
+    const hasDay = dayEl.value !== '';
+    const hasTime = timeEl.value !== '';
+    let start = NaN;
+    if (hasDay !== hasTime) {
+      problems.push('요일과 시작 시간은 함께 입력하거나 둘 다 비워 두세요.');
+      markInvalid(hasDay ? timeEl : dayEl, true);
+    } else if (hasTime) {
+      start = parseTime(timeEl.value);
+      if (Number.isNaN(start) || start % STEP !== 0) {
+        problems.push('시작 시간은 15분 단위(00, 15, 30, 45분)로 입력해 주세요.');
+        markInvalid(timeEl, true);
+      }
+    }
+    if (problems.length) {
+      toast(problems.join(' '), 'error');
+      (nameEl.getAttribute('aria-invalid') ? nameEl : durEl.getAttribute('aria-invalid') ? durEl : dayEl.getAttribute('aria-invalid') ? dayEl : timeEl).focus();
+      return;
+    }
+    const color = (document.querySelector('input[name=color]:checked') || {}).value || 'default';
+    const card = { id: uid('c'), name, duration, color };
+    state.cards.push(card);
+    let msg = `'${name}' ${duration}분 카드를 만들었어요.`;
+    let type = 'success';
+    if (hasDay && hasTime) {
+      const day = Number(dayEl.value);
+      const err = placeCard(card, day, start);
+      if (err) { msg += ' 하지만 시간표에는 배치하지 못했어요. ' + err; type = 'error'; }
+      else msg = `'${name}' 카드를 만들고 ${DAYS[day]}요일 ${range(start, duration)}에 배치했어요.`;
+    }
+    commit();
+    toast(msg, type);
+    e.target.reset();
+    document.querySelector('input[name=color][value=default]').checked = true;
+    nameEl.focus();
+  });
+
+  // 3. 선택한 카드로 일정 추가
+  $('aCard').addEventListener('change', e => { selectedCardId = e.target.value || null; renderCards(); });
+  $('addForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const cardEl = $('aCard'), dayEl = $('aDay'), timeEl = $('aTime');
+    [cardEl, dayEl, timeEl].forEach(el => markInvalid(el, false));
+    const problems = [];
+    const card = state.cards.find(c => c.id === cardEl.value);
+    if (!card) { problems.push('추가할 카드를 선택해 주세요.'); markInvalid(cardEl, true); }
+    if (dayEl.value === '') { problems.push('요일을 선택해 주세요.'); markInvalid(dayEl, true); }
+    const start = parseTime(timeEl.value);
+    if (!timeEl.value) { problems.push('시작 시간을 입력해 주세요.'); markInvalid(timeEl, true); }
+    else if (Number.isNaN(start) || start % STEP !== 0) { problems.push('시작 시간은 15분 단위(00, 15, 30, 45분)로 입력해 주세요.'); markInvalid(timeEl, true); }
+    if (problems.length) {
+      toast(problems.join(' '), 'error');
+      [cardEl, dayEl, timeEl].find(el => el.getAttribute('aria-invalid')).focus();
+      return;
+    }
+    const day = Number(dayEl.value);
+    const err = placeCard(card, day, start);
+    if (err) { toast(err, 'error'); return; }
+    commit();
+    toast(`${DAYS[day]}요일 ${range(start, card.duration)}에 '${card.name}' 일정을 추가했어요.`, 'success');
+  });
+
+  /* ===== 끌어다 놓기 ===== */
+  let drag = null;
+  const preview = document.createElement('div');
+  preview.className = 'drop-preview';
+
+  function startDrag(ev, info) {
+    drag = info;
+    ev.dataTransfer.effectAllowed = info.kind === 'card' ? 'copy' : 'move';
+    try { ev.dataTransfer.setData('text/plain', info.kind + ':' + info.id); } catch (err) { /* 일부 브라우저 */ }
+  }
+
+  function endDrag() {
+    drag = null;
+    preview.remove();
+    document.querySelectorAll('.event.dragging').forEach(e => e.classList.remove('dragging'));
+    document.querySelectorAll('.day-col.drag-over').forEach(c => c.classList.remove('drag-over'));
+  }
+
+  // 마우스 위치를 15분 단위 시작 시간으로 바꾼다.
+  function dropTarget(col, ev) {
+    if (!drag) return null;
+    const day = Number(col.dataset.day);
+    const rect = col.getBoundingClientRect();
+    let duration, ignoreId, start;
+    if (drag.kind === 'card') {
+      const card = state.cards.find(c => c.id === drag.id);
+      if (!card) return null;
+      duration = card.duration;
+      start = DAY_START + Math.floor((ev.clientY - rect.top) / SLOT_PX) * STEP;
+    } else {
+      const item = state.events.find(e => e.id === drag.id);
+      if (!item) return null;
+      duration = item.duration;
+      ignoreId = item.id;
+      start = DAY_START + Math.round((ev.clientY - rect.top - drag.offset) / SLOT_PX) * STEP;
+    }
+    return { day, start, duration, err: checkPlacement(day, start, duration, ignoreId) };
+  }
+
+  function bindDropZone(col) {
+    col.addEventListener('dragover', ev => {
+      const t = dropTarget(col, ev);
+      if (!t) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = drag.kind === 'card' ? 'copy' : 'move';
+      col.classList.add('drag-over');
+      if (preview.parentNode !== col) col.append(preview);
+      const top = Math.max(0, (t.start - DAY_START) / STEP * SLOT_PX);
+      const bottom = Math.min(72 * SLOT_PX, (t.start + t.duration - DAY_START) / STEP * SLOT_PX);
+      preview.style.top = top + 'px';
+      preview.style.height = Math.max(SLOT_PX, bottom - top) + 'px';
+      preview.classList.toggle('bad', !!t.err);
+      preview.textContent = `${DAYS[t.day]} ${range(t.start, t.duration)}` + (t.err ? ' · 배치 불가' : '');
+    });
+    col.addEventListener('dragleave', ev => {
+      if (ev.relatedTarget && col.contains(ev.relatedTarget)) return;
+      col.classList.remove('drag-over');
+      if (preview.parentNode === col) preview.remove();
+    });
+    col.addEventListener('drop', ev => {
+      ev.preventDefault();
+      const t = dropTarget(col, ev);
+      const info = drag;
+      endDrag();
+      if (!t || !info) return;
+      if (t.err) { toast(t.err, 'error'); render(); return; }
+      if (info.kind === 'card') {
+        const card = state.cards.find(c => c.id === info.id);
+        state.events.push({ id: uid('e'), day: t.day, start: t.start, duration: card.duration, name: card.name, color: card.color });
+        commit();
+        toast(`${DAYS[t.day]}요일 ${range(t.start, t.duration)}에 '${card.name}' 일정을 추가했어요.`, 'success');
+      } else {
+        const item = state.events.find(e => e.id === info.id);
+        const from = `${DAYS[item.day]}요일 ${range(item.start, item.duration)}`;
+        item.day = t.day;
+        item.start = t.start;
+        commit();
+        toast(`'${item.name}' 일정을 ${from} → ${DAYS[t.day]}요일 ${range(t.start, t.duration)}로 옮겼어요.`, 'success');
+      }
+    });
+  }
+
+  /* ===== 데이터 파일 ===== */
+  $('exportBtn').addEventListener('click', () => {
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const data = { app: '주중 플래너', version: 1, savedAt: now.toISOString(), cards: state.cards, events: state.events };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `주중플래너_데이터_${stamp}.json`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast(`카드 ${state.cards.length}개와 일정 ${state.events.length}개를 파일로 저장했어요.`, 'success');
+  });
+
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+
+  $('importFile').addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => toast('파일을 읽지 못했어요. 다시 시도해 주세요.', 'error');
+    reader.onload = () => {
+      let next = null;
+      try { next = sanitize(JSON.parse(String(reader.result))); } catch (err) { next = null; }
+      if (!next) { toast('주중 플래너 데이터 파일이 아니거나 내용이 올바르지 않아 불러오지 못했어요. 현재 내용은 그대로예요.', 'error'); return; }
+      confirmReplace(next, file.name);
+    };
+    reader.readAsText(file);
+  });
+
+  /* ===== 확인 창 (파일 교체·초기화 공용) ===== */
+  // 승인하면 onOk, 취소(또는 Esc)하면 onCancel을 실행한다.
+  const dlg = $('replaceDialog');
+  let pendingConfirm = null;
+
+  function finishConfirm(ok) {
+    if (!pendingConfirm) return;
+    const job = pendingConfirm;
+    pendingConfirm = null;
+    if (dlg.open) dlg.close();
+    (ok ? job.onOk : job.onCancel)();
+  }
+
+  $('replaceOk').addEventListener('click', () => finishConfirm(true));
+  $('replaceCancel').addEventListener('click', () => finishConfirm(false));
+  dlg.addEventListener('cancel', e => { e.preventDefault(); finishConfirm(false); });
+  dlg.addEventListener('close', () => finishConfirm(false));
+
+  function askConfirm({ title, text, okLabel, danger, onOk, onCancel }) {
+    pendingConfirm = { onOk, onCancel };
+    if (typeof dlg.showModal !== 'function') { finishConfirm(window.confirm(title + '\n' + text)); return; }
+    $('replaceTitle').textContent = title;
+    $('replaceText').textContent = text;
+    const ok = $('replaceOk');
+    ok.textContent = okLabel;
+    ok.classList.toggle('danger', !!danger);
+    if (!dlg.open) dlg.showModal();
+    $('replaceCancel').focus();
+  }
+
+  // 파일 불러오기: 승인하면 전체 교체, 취소하면 현재 내용 유지
+  function confirmReplace(next, fileName) {
+    askConfirm({
+      title: '현재 내용을 바꿀까요?',
+      text: `'${fileName}'의 카드 ${next.cards.length}개와 일정 ${next.events.length}개로 지금의 카드 목록과 시간표를 모두 교체합니다. 취소하면 현재 내용이 그대로 유지돼요.`,
+      okLabel: '교체하기',
+      onOk: () => {
+        state = next;
+        selectedCardId = null;
+        commit();
+        toast('파일 내용으로 카드 목록과 시간표를 교체했어요.', 'success');
+      },
+      onCancel: () => toast('불러오기를 취소했어요. 현재 내용을 그대로 유지합니다.')
+    });
+  }
+
+  // 초기화: 기본 카드 4종과 빈 시간표(처음 사용할 때 상태)로 되돌림
+  $('resetBtn').addEventListener('click', () => {
+    askConfirm({
+      title: '처음 상태로 초기화할까요?',
+      text: `지금의 카드 ${state.cards.length}개와 일정 ${state.events.length}개를 모두 지우고, 기본 카드 4종(공부·운동·식사·휴식)과 빈 시간표로 되돌립니다. 되돌릴 수 없으니 필요하면 먼저 '파일로 저장'으로 백업하세요.`,
+      okLabel: '초기화하기',
+      danger: true,
+      onOk: () => {
+        state = defaultState();
+        selectedCardId = null;
+        $('createForm').reset();
+        document.querySelector('input[name=color][value=default]').checked = true;
+        $('addForm').reset();
+        document.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
+        commit();
+        $('ttScroll').scrollTop = 0;
+        toast('처음 상태로 초기화했어요. 기본 카드 4종과 빈 시간표로 시작합니다.', 'success');
+      },
+      onCancel: () => toast('초기화를 취소했어요. 현재 내용을 그대로 유지합니다.')
+    });
+  });
+
+  /* ===== 시작 ===== */
+  fillDaySelect($('cDay'), '선택 안 함');
+  fillDaySelect($('aDay'), '요일 선택');
+  buildSwatches();
+  buildTimetable();
+  load();
+  render();
+  save();
+})();
+</script>
+</body>
+</html>
